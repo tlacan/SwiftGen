@@ -9,21 +9,18 @@ import PathKit
 
 enum TemplatesCLI {
   static let list = command(
-    Option<String>(
+    Option<ParserCLI?>(
       "only",
-      default: "",
+      default: nil,
       flag: "l",
-      description: "If specified, only list templates valid for that specific subcommand",
-      validator: isSubcommandName
+      description: "If specified, only list templates valid for that specific parser"
     ),
     OutputDestination.cliOption
-  ) { onlySubcommand, output in
+  ) { onlyParser, output in
     try ErrorPrettifier.execute {
-      let commandsList = onlySubcommand.isEmpty
-        ? ParserCLI.allCommands
-        : [ParserCLI.command(named: onlySubcommand)].compactMap { $0 }
+      let parsersList = onlyParser.map { [$0] } ?? ParserCLI.allCommands
 
-      let lines = commandsList.map(templatesList(subcommand:))
+      let lines = parsersList.map(templatesList(parser:))
       try output.write(content: lines.joined(separator: "\n"))
       try output.write(
         content: """
@@ -37,27 +34,20 @@ enum TemplatesCLI {
   }
 
   static let doc = command(
-    Argument<String?>("subcommand", description: "the name of the subcommand for the template, like `strings`"),
+    Argument<ParserCLI?>("parser", description: "the name of the parser the template is for, like `strings`"),
     Argument<String?>("template", description: "the name of the template to find, like `swift5` or `flat-swift5`")
-  ) { subcommand, template in
+  ) { parser, template in
     var path = "templates/"
-    if let subcommand = subcommand {
-      // If we have a subcommand argument, ensure that is one of the allowed ones
-      guard let parserCLI = ParserCLI.command(named: subcommand) else {
-        let list = ParserCLI.allCommands.map { $0.name }.joined(separator: "/")
-        throw ArgumentParserError(
-          "If provided, the first argument must be the name of a subcommand (\(list))."
-        )
-      }
-      path += "\(subcommand)/"
+    if let parser = parser {
+      path += "\(parser.name)/"
 
-      // If we have a template argument, ensure that is one of the bundled templates for that subcommand
+      // If we also have a template argument, ensure that is one of the bundled templates for that parser
       if let template = template {
-        let list = templates(in: Path.bundledTemplates + parserCLI.templateFolder).map(\.lastComponentWithoutExtension)
+        let list = templates(in: Path.bundledTemplates + parser.templateFolder).map(\.lastComponentWithoutExtension)
         guard list.contains(template) else {
           throw ArgumentParserError(
             """
-            If provided, the 2nd argument must be the name of a bundled template for the given subcommand, i.e. one of:
+            If provided, the 2nd argument must be the name of a bundled template for the given parser, i.e. one of:
             \(list.map { " - \($0)" }.joined(separator: "\n"))
             """
           )
@@ -82,6 +72,20 @@ enum TemplatesCLI {
 
 // MARK: Private Methods
 
+extension ParserCLI: ArgumentConvertible {
+  public init(parser: ArgumentParser) throws {
+    if let value = parser.shift() {
+      if let value = ParserCLI.command(named: value) {
+        self = value
+      } else {
+        throw ArgumentError.invalidType(value: value, type: "parser name", argument: nil)
+      }
+    } else {
+      throw ArgumentError.missingValue(argument: nil)
+    }
+  }
+}
+
 private extension TemplatesCLI {
   static func templates(in path: Path) -> [Path] {
     guard let files = try? path.children() else { return [] }
@@ -90,11 +94,11 @@ private extension TemplatesCLI {
       .sorted()
   }
 
-  static func templatesList(subcommand: ParserCLI) -> String {
+  static func templatesList(parser: ParserCLI) -> String {
     func templatesFormattedList(in path: Path) -> [String] {
-      templates(in: path + subcommand.templateFolder).map { "   - \($0.lastComponentWithoutExtension)" }
+      templates(in: path + parser.templateFolder).map { "   - \($0.lastComponentWithoutExtension)" }
     }
-    var lines = ["\(subcommand.name):"]
+    var lines = ["\(parser.name):"]
     lines.append("  custom:")
     lines.append(contentsOf: templatesFormattedList(in: Path.appSupportTemplates))
     lines.append("  bundled:")
@@ -102,28 +106,20 @@ private extension TemplatesCLI {
     return lines.joined(separator: "\n")
   }
 
-  static func isSubcommandName(name: String) throws -> String {
-    guard ParserCLI.allCommands.contains(where: { $0.name == name }) else {
-      throw ArgumentError.invalidType(value: name, type: "subcommand", argument: "--only")
-    }
-    return name
-  }
-
   // Defines a 'generic' command for doing an operation on a named template. It'll receive the following
   // arguments from the user:
-  // - 'subcommand'
+  // - 'parser'
   // - 'template'
   // These will then be converted into an actual template path, and passed to the result closure.
   static func pathCommandGenerator(execute: @escaping (Path, OutputDestination) throws -> Void) -> CommandType {
     command(
-      Argument<String>("subcommand", description: "the name of the subcommand for the template, like `xcassets`"),
+      Argument<ParserCLI>("parser", description: "the name of the parser the template is for, like `xcassets`"),
       Argument<String>("template", description: "the name of the template to find, like `swift5` or `flat-swift5`"),
       OutputDestination.cliOption
-    ) { subcommandName, templateName, output in
+    ) { parser, templateName, output in
       try ErrorPrettifier.execute {
-        guard let subcommand = ParserCLI.command(named: subcommandName) else { return }
         let template = TemplateRef.name(templateName)
-        let path = try template.resolvePath(forSubcommand: subcommand.templateFolder)
+        let path = try template.resolvePath(forParser: parser)
         try execute(path, output)
       }
     }
