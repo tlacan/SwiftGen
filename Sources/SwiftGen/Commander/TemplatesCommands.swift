@@ -36,6 +36,40 @@ enum TemplatesCLI {
     }
   }
 
+  static let doc = command(
+    Argument<String?>("subcommand", description: "the name of the subcommand for the template, like `strings`"),
+    Argument<String?>("template", description: "the name of the template to find, like `swift5` or `flat-swift5`")
+  ) { subcommand, template in
+    var path = "templates/"
+    if let subcommand = subcommand {
+      // If we have a subcommand argument, ensure that is one of the allowed ones
+      guard let parserCLI = ParserCLI.command(named: subcommand) else {
+        let list = ParserCLI.allCommands.map { $0.name }.joined(separator: "/")
+        throw ArgumentParserError(
+          "If provided, the first argument must be the name of a subcommand (\(list))."
+        )
+      }
+      path += "\(subcommand)/"
+
+      // If we have a template argument, ensure that is one of the bundled templates for that subcommand
+      if let template = template {
+        let list = templates(in: Path.bundledTemplates + parserCLI.templateFolder).map(\.lastComponentWithoutExtension)
+        guard list.contains(template) else {
+          throw ArgumentParserError(
+            """
+            If provided, the 2nd argument must be the name of a bundled template for the given subcommand, i.e. one of:
+            \(list.map { " - \($0)" }.joined(separator: "\n"))
+            """
+          )
+        }
+        path += "\(template).md"
+      }
+    }
+    let url = gitHubDocURL(version: Version.swiftgen, path: path)
+    logMessage(.info, "Opening documentation: \(url)")
+    NSWorkspace.shared.open(url)
+  }
+
   static let cat = pathCommandGenerator { (path: Path, output: OutputDestination) in
     let content: String = try path.read()
     try output.write(content: content)
@@ -49,20 +83,22 @@ enum TemplatesCLI {
 // MARK: Private Methods
 
 private extension TemplatesCLI {
-  static func templatesList(subcommand: ParserCLI) -> String {
-    func templates(in path: Path) -> [String] {
-      guard let files = try? path.children() else { return [] }
-      return files.lazy
-        .filter { $0.extension == "stencil" }
-        .sorted()
-        .map { "   - \($0.lastComponentWithoutExtension)" }
-    }
+  static func templates(in path: Path) -> [Path] {
+    guard let files = try? path.children() else { return [] }
+    return files
+      .filter { $0.extension == "stencil" }
+      .sorted()
+  }
 
+  static func templatesList(subcommand: ParserCLI) -> String {
+    func templatesFormattedList(in path: Path) -> [String] {
+      templates(in: path + subcommand.templateFolder).map { "   - \($0.lastComponentWithoutExtension)" }
+    }
     var lines = ["\(subcommand.name):"]
     lines.append("  custom:")
-    lines.append(contentsOf: templates(in: Path.appSupportTemplates + subcommand.templateFolder))
+    lines.append(contentsOf: templatesFormattedList(in: Path.appSupportTemplates))
     lines.append("  bundled:")
-    lines.append(contentsOf: templates(in: Path.bundledTemplates + subcommand.templateFolder))
+    lines.append(contentsOf: templatesFormattedList(in: Path.bundledTemplates))
     return lines.joined(separator: "\n")
   }
 
@@ -80,7 +116,7 @@ private extension TemplatesCLI {
   // These will then be converted into an actual template path, and passed to the result closure.
   static func pathCommandGenerator(execute: @escaping (Path, OutputDestination) throws -> Void) -> CommandType {
     command(
-      Argument<String>("subcommand", description: "the name of the subcommand for the template, like `colors`"),
+      Argument<String>("subcommand", description: "the name of the subcommand for the template, like `xcassets`"),
       Argument<String>("template", description: "the name of the template to find, like `swift5` or `flat-swift5`"),
       OutputDestination.cliOption
     ) { subcommandName, templateName, output in
