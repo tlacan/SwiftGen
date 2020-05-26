@@ -13,12 +13,28 @@
 * XCAssets: the `colorAliasName` and `imageAliasName` template parameters are now deprecated and will be removed in the next major release.  
   [David Jennes](https://github.com/djbe)
   [#614](https://github.com/SwiftGen/SwiftGen/pull/614)
+  
+### Deprecations
+
+* The use of `swiftgen <parser>` (e.g. `swiftgen strings`, `swiftgen xcassets`, …) command line for running individual parsers is now deprecated in favor of `swiftgen run <parser>`. See "New Features" below.  
+  [@AliSoftware](https://github.com/AliSoftware)
+  [#697](https://github.com/SwiftGen/SwiftGen/pull/697)
+* The subcommand `swiftgen templates` has been renamed `swiftgen template` (singular); the plural form of the command has been deprecated and will be removed in next major version.  
+  [@AliSoftware](https://github.com/AliSoftware)
+  [#697](https://github.com/SwiftGen/SwiftGen/pull/697)
+
 
 ### New Features
 
+* The use of `swiftgen <parser>` command line for running individual parsers is now deprecated in favor of `swiftgen run <parser>`. We still highly recommend to use a configuration file for flexibility and performance reasons in your projects, but as `swiftgen run <parser>` can still be useful when you are working on custom templates, that set of commands have now been moved under a common `run` subcommand to avoid polluting the list of root commands.  
+  [@AliSoftware](https://github.com/AliSoftware)
+  [#697](https://github.com/SwiftGen/SwiftGen/pull/697)
 * You can now easily create a new config file using `swiftgen config init`. This will create an example and commented config file and open it to let you edit it to your needs.  _Note that the generated config file is static content which doesn't take the user's project into account (though that might change in the future)_.  
   [@AliSoftware](https://github.com/AliSoftware)
   [#694](https://github.com/SwiftGen/SwiftGen/pull/694)
+* You can now use `swiftgen template doc [parser] [template]` on the command line to quickly open the documentation for templates on GitHub direclty from your terminal.  
+  [@AliSoftware](https://github.com/AliSoftware)
+  [#697](https://github.com/SwiftGen/SwiftGen/pull/697)
 * Each command now accepts an `options` dictionary, with which you can set internal parser settings to change its behaviour. See the commands' specific documentation for available options.  
   [David Jennes](https://github.com/djbe)
   [#587](https://github.com/SwiftGen/SwiftGen/pull/587)
